@@ -3,7 +3,7 @@
 **Date:** 2026-08-16
 **Status:** Approved design, pending implementation plan
 **Module:** `github.com/andrhamm/claude-mem-lan-sync`
-**Binary:** `cmemhub` (short to type; the repo name stays descriptive for search)
+**Binary:** `cmemlan` (short to type; the repo name stays descriptive for search)
 **License:** MIT
 
 ## Problem
@@ -261,7 +261,7 @@ bytes, and matching JavaScript's escaping rules from Go invites false rejections
 
 ## Discovery
 
-The hub advertises `_cmemhub._tcp.local` over mDNS/DNS-SD with TXT records `v=1`, `hub=<short id>`,
+The hub advertises `_cmemlan._tcp.local` over mDNS/DNS-SD with TXT records `v=1`, `hub=<short id>`,
 `name=<hostname>`. `connect` with no URL browses for hubs and prompts.
 
 Multicast does not traverse Tailscale or route between subnets. Same-LAN discovery works;
@@ -276,7 +276,7 @@ The hub is the identity boundary. No Claude Code credentials are read.
 - `user_id` = hub id, shared by all paired devices, which partitions the log
 - Every protocol request requires `Authorization: Bearer <psk>`, compared in constant time; missing
   or wrong key returns `401`
-- `cmemhub pair` opens a five-minute window and prints a single-use code. `connect --code <code>`
+- `cmemlan pair` opens a five-minute window and prints a single-use code. `connect --code <code>`
   exchanges it for the PSK via `POST /pair` (our endpoint, outside the claude-mem protocol surface)
 - `connect --token <psk>` remains available for scripted installs
 - Pairing events are logged with device name and surface in `status`
@@ -352,7 +352,7 @@ capture-replay plus a documented two-machine manual checklist in `docs/testing.m
 ## Repository
 
 ```
-cmd/cmemhub/                main, subcommand dispatch
+cmd/cmemlan/                main, subcommand dispatch
 internal/{proto,store,hub,discover,pair,clientdb,settings,cli}/
 testdata/fixtures/          captured client traffic
 docs/                       protocol.md, architecture.md, security.md,
