@@ -86,7 +86,23 @@ func runServe(args []string, env Env) int {
 		return 1
 	}
 
-	prefixes, err := hub.ParseCIDRList(f.allowCIDR)
+	// The container image cannot expand an environment variable in its exec-form
+	// entrypoint, so the requirement lives here instead: inside a container the
+	// bind guard is necessarily overridden, and the peer filter is what remains.
+	allowCIDR := f.allowCIDR
+	if allowCIDR == "" {
+		allowCIDR = os.Getenv("CMEMLAN_ALLOW_CIDR")
+	}
+	if allowCIDR == "" && os.Getenv("CMEMLAN_REQUIRE_ALLOW_CIDR") == "1" {
+		fmt.Fprintln(env.Stderr,
+			"cmemlan: CMEMLAN_ALLOW_CIDR is required in this environment\n\n"+
+				"This container binds every interface, so the peer allowlist is the only thing\n"+
+				"restricting who can reach your memory. Set it to your LAN, for example:\n"+
+				"  -e CMEMLAN_ALLOW_CIDR=192.168.1.0/24")
+		return 1
+	}
+
+	prefixes, err := hub.ParseCIDRList(allowCIDR)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "cmemlan: %v\n", err)
 		return 1

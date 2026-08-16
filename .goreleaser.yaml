@@ -1,0 +1,92 @@
+# GoReleaser v2 configuration.
+version: 2
+
+project_name: cmemlan
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: cmemlan
+    main: ./cmd/cmemlan
+    binary: cmemlan
+    env:
+      # Defaults to 1 on a native Linux build, which dynamically links libc and
+      # breaks a scratch image. The pure-Go SQLite driver is what lets us do this
+      # and still cross-compile darwin and windows from Linux CI.
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/andrhamm/claude-mem-lan-sync/internal/buildinfo.Version={{.Version}}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - docs/**/*
+
+checksum:
+  name_template: 'checksums.txt'
+
+sboms:
+  - artifacts: archive
+
+# Keyless signing over the checksum file. Checksums alone prove nothing if the
+# release page itself is compromised.
+signs:
+  - cmd: cosign
+    certificate: '${artifact}.pem'
+    args:
+      - sign-blob
+      - '--output-certificate=${certificate}'
+      - '--output-signature=${signature}'
+      - '${artifact}'
+      - '--yes'
+    artifacts: checksum
+    output: true
+
+dockers_v2:
+  - images:
+      - ghcr.io/andrhamm/claude-mem-lan-sync
+    tags:
+      - '{{ .Version }}'
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    dockerfile: Dockerfile
+
+release:
+  prerelease: auto
+  footer: |
+    ## Verifying
+
+    ```bash
+    cosign verify-blob checksums.txt \
+      --certificate checksums.txt.pem \
+      --signature checksums.txt.sig \
+      --certificate-identity-regexp 'https://github\.com/andrhamm/claude-mem-lan-sync/.*' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+    sha256sum -c checksums.txt --ignore-missing
+    ```
+
+    macOS binaries are unsigned and unnotarized; clear the quarantine attribute with
+    `xattr -d com.apple.quarantine ./cmemlan`.
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'

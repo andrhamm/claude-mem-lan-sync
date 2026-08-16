@@ -1,0 +1,17 @@
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # modernc.org/sqlite requires the exact libc version pinned in its own
+      # go.mod. Bumping it independently breaks the build; let the sqlite update
+      # carry it.
+      - dependency-name: modernc.org/libc
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

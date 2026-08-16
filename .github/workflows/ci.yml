@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GO_VERSION: '1.26'
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,7 +18,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version: ${{ env.GO_VERSION }}
           check-latest: true
       - run: go vet ./...
       - run: go build ./...
@@ -27,8 +30,112 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version: ${{ env.GO_VERSION }}
           check-latest: true
-      # -race requires cgo; release builds set CGO_ENABLED=0, so this lives in
-      # its own job to keep the two from leaking into each other.
+      # -race needs cgo, while release builds must set CGO_ENABLED=0. Separate
+      # jobs so the two settings cannot leak into each other.
       - run: CGO_ENABLED=1 go test -race ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l ./cmd ./internal ./test)
+          if [ -n "$unformatted" ]; then
+            echo "not gofmt'd:"; echo "$unformatted"; exit 1
+          fi
+
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...
+
+  fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Captured traffic contains real prompt text and bearer tokens. Only
+      # scrubbed fixtures may be committed, and this is the backstop.
+      - name: no secrets or personal paths in committed fixtures
+        run: |
+          if [ -d testdata/fixtures ]; then
+            if grep -rIl -e 'Bearer ' -e '/home/' -e '/Users/' testdata/fixtures; then
+              echo "committed fixtures contain secrets or personal paths"; exit 1
+            fi
+          fi
+          if [ -d testdata/captures-local ]; then
+            echo "testdata/captures-local must never be committed"; exit 1
+          fi
+
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: validate plugin manifests and skill frontmatter
+        run: |
+          python3 - <<'PY'
+          import json, sys, pathlib, re
+
+          errors = []
+
+          market = json.load(open('.claude-plugin/marketplace.json'))
+          for field in ('name', 'owner', 'plugins'):
+              if field not in market:
+                  errors.append(f'marketplace.json missing {field}')
+          for p in market.get('plugins', []):
+              for field in ('name', 'source', 'description'):
+                  if field not in p:
+                      errors.append(f'marketplace plugin entry missing {field}')
+
+          plugin = json.load(open('plugin/.claude-plugin/plugin.json'))
+          for field in ('name', 'version', 'description'):
+              if field not in plugin:
+                  errors.append(f'plugin.json missing {field}')
+
+          for skill in pathlib.Path('plugin/skills').glob('*/SKILL.md'):
+              text = skill.read_text()
+              m = re.match(r'^---\n(.*?)\n---\n', text, re.S)
+              if not m:
+                  errors.append(f'{skill}: no frontmatter')
+                  continue
+              fm = m.group(1)
+              name = re.search(r'^name:\s*(\S+)', fm, re.M)
+              desc = re.search(r'^description:\s*(.+)', fm, re.M | re.S)
+              if not name:
+                  errors.append(f'{skill}: no name')
+              elif name.group(1) != skill.parent.name:
+                  errors.append(f'{skill}: name {name.group(1)} != directory {skill.parent.name}')
+              if not desc or len(desc.group(1).strip()) < 40:
+                  errors.append(f'{skill}: description missing or too short to match on')
+
+          if errors:
+              print('\n'.join(errors)); sys.exit(1)
+          print('plugin manifests and skills look good')
+          PY
+
+  goreleaser-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: check
