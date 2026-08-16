@@ -136,6 +136,22 @@ jobs:
           print('plugin manifests and skills look good')
           PY
 
+  clientvalidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      # Validates responses against claude-mem's own rules rather than our
+      # reimplementation of them, which is the only tier that can catch a
+      # misunderstanding shared by our code and our tests.
+      - run: cd test/clientvalidate && go test -tags clientvalidate ./...
+
   goreleaser-check:
     runs-on: ubuntu-latest
     steps:

@@ -3,7 +3,7 @@ PKG := github.com/andrhamm/claude-mem-lan-sync
 VERSION ?= dev
 LDFLAGS := -s -w -X $(PKG)/internal/buildinfo.Version=$(VERSION)
 
-.PHONY: build test race vet lint fuzz e2e clean
+.PHONY: build test race vet lint fuzz e2e clientvalidate clean
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/cmemlan
@@ -25,6 +25,11 @@ lint:
 # Seed corpora run with the normal test target; this is the real fuzzing pass.
 fuzz:
 	go test ./internal/proto -run xxx -fuzz FuzzOpRoundTrip -fuzztime 60s
+
+# Checks responses against claude-mem's own validation rules rather than our
+# reimplementation of them. Needs node; no claude-mem install required.
+clientvalidate:
+	cd test/clientvalidate && go test -tags clientvalidate -v ./...
 
 # Requires node and a claude-mem install. Uses a scratch data dir and a
 # non-default worker port so it cannot touch a developer's live memory.
