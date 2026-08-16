@@ -1,0 +1,17 @@
+{
+  "name": "andrhamm",
+  "owner": {
+    "name": "andrhamm"
+  },
+  "metadata": {
+    "description": "Plugins by andrhamm"
+  },
+  "plugins": [
+    {
+      "name": "claude-mem-lan-sync",
+      "version": "0.1.0",
+      "source": "./plugin",
+      "description": "Self-hosted LAN sync for claude-mem — share Claude Code memory between your own machines without cloud sync"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "name": "claude-mem-lan-sync",
+  "version": "0.1.0",
+  "description": "Self-hosted LAN sync for claude-mem — share Claude Code memory between your own machines without cloud sync",
+  "author": {
+    "name": "andrhamm"
+  },
+  "repository": "https://github.com/andrhamm/claude-mem-lan-sync",
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "claude-mem",
+    "memory",
+    "sync",
+    "self-hosted",
+    "lan",
+    "privacy"
+  ],
+  "homepage": "https://github.com/andrhamm/claude-mem-lan-sync#readme"
+}
