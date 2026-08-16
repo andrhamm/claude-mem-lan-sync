@@ -85,7 +85,7 @@ func (d Dec) Int64() (int64, error) {
 	if uint64(d) > math.MaxInt64 {
 		return 0, fmt.Errorf("proto: %s exceeds the signed 64-bit range SQLite can store", d)
 	}
-	return int64(d), nil
+	return int64(d), nil //nolint:gosec // bounded by the check immediately above
 }
 
 // DecFromInt64 converts a stored value back.

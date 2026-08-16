@@ -74,10 +74,11 @@ func (d *DB) Backfill(o BackfillOpts) (BackfillResult, error) {
 		var bytes sql.NullInt64
 		q := fmt.Sprintf(`SELECT COUNT(*), SUM(LENGTH(COALESCE(text,'')) + LENGTH(COALESCE(narrative,'')))
 		                  FROM %s WHERE origin_device_id IS NULL AND %s`, t.Table, where)
-		if t.Table == "user_prompts" {
+		switch t.Table {
+		case "user_prompts":
 			q = fmt.Sprintf(`SELECT COUNT(*), SUM(LENGTH(COALESCE(prompt_text,'')))
 			                 FROM %s WHERE origin_device_id IS NULL AND %s`, t.Table, where)
-		} else if t.Table == "session_summaries" {
+		case "session_summaries":
 			q = fmt.Sprintf(`SELECT COUNT(*), SUM(LENGTH(COALESCE(request,'')) + LENGTH(COALESCE(learned,'')))
 			                 FROM %s WHERE origin_device_id IS NULL AND %s`, t.Table, where)
 		}

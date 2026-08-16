@@ -20,7 +20,8 @@ func (s *Server) writeError(w http.ResponseWriter, status int, reason proto.Reje
 	w.Header().Set("Content-Length", itoa(len(body)))
 	s.setSyncMode(w)
 	w.WriteHeader(status)
-	_, _ = w.Write(body)
+	// reason comes from a fixed enum, so body contains no caller-supplied bytes.
+	_, _ = w.Write(body) //nolint:gosec // no request data reaches this response
 }
 
 func itoa(n int) string {

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,8 +8,6 @@ import (
 	"runtime"
 	"strings"
 )
-
-var errNoDiskCheck = errors.New("cmemlan: free space checks are unsupported on this platform")
 
 // serviceUnit renders a systemd user unit.
 //
@@ -105,7 +102,7 @@ func runService(f serveFlags, dataDir string, env Env) int {
 			fmt.Fprintln(env.Stdout, "service removed")
 			return 0
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			fmt.Fprintf(env.Stderr, "cmemlan: %v\n", err)
 			return 1
 		}
@@ -150,7 +147,7 @@ func runService(f serveFlags, dataDir string, env Env) int {
 			fmt.Fprintln(env.Stdout, "service removed")
 			return 0
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			fmt.Fprintf(env.Stderr, "cmemlan: %v\n", err)
 			return 1
 		}

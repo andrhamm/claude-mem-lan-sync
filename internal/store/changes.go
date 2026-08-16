@@ -79,7 +79,11 @@ func (s *Store) Changes(ctx context.Context, since proto.Dec, limit, maxBytes in
 	}
 	defer func() { _ = rows.Close() }()
 
-	res := ChangesResult{HeadSeq: proto.Dec(head), Epoch: epoch}
+	headDec, err := proto.DecFromInt64(head)
+	if err != nil {
+		return ChangesResult{}, err
+	}
+	res := ChangesResult{HeadSeq: headDec, Epoch: epoch}
 	var bytesSoFar int
 
 	for rows.Next() {

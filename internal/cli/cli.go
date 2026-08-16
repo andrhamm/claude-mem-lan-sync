@@ -39,13 +39,6 @@ type Env struct {
 	Now     func() time.Time
 }
 
-func (e Env) now() time.Time {
-	if e.Now != nil {
-		return e.Now()
-	}
-	return time.Now()
-}
-
 const usage = `cmemlan — self-hosted LAN sync for claude-mem
 
 Usage:

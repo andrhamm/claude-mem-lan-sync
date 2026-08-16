@@ -46,7 +46,8 @@ func UnquoteJSONString(literal []byte) ([]byte, error) {
 			if i >= len(in) {
 				return nil, Reject(ReasonBodyShape)
 			}
-			switch in[i] {
+			esc := in[i]
+			switch esc {
 			case '"':
 				out = append(out, '"')
 				i++
@@ -116,14 +117,14 @@ func decodeUnicodeEscape(b []byte) (rune, int, error) {
 		return 0, 0, Reject(ReasonBodyShape)
 	}
 
-	if !utf16.IsSurrogate(rune(r1)) {
-		return rune(r1), 6, nil
+	if !utf16.IsSurrogate(r1) {
+		return r1, 6, nil
 	}
 
 	// A high surrogate may be followed by a low surrogate escape.
 	if len(b) >= 12 && b[6] == '\\' && b[7] == 'u' {
 		if r2, ok := hex4(b[8:12]); ok {
-			if combined := utf16.DecodeRune(rune(r1), rune(r2)); combined != utf8.RuneError {
+			if combined := utf16.DecodeRune(r1, r2); combined != utf8.RuneError {
 				return combined, 12, nil
 			}
 		}
@@ -133,20 +134,22 @@ func decodeUnicodeEscape(b []byte) (rune, int, error) {
 	return utf8.RuneError, 6, nil
 }
 
-func hex4(b []byte) (uint32, bool) {
+// hex4 decodes exactly four hex digits into the code unit they represent. The
+// result is at most 0xFFFF, so it always fits a rune.
+func hex4(b []byte) (rune, bool) {
 	if len(b) < 4 {
 		return 0, false
 	}
-	var v uint32
+	var v rune
 	for i := 0; i < 4; i++ {
-		var d uint32
+		var d rune
 		switch c := b[i]; {
 		case c >= '0' && c <= '9':
-			d = uint32(c - '0')
+			d = rune(c - '0')
 		case c >= 'a' && c <= 'f':
-			d = uint32(c-'a') + 10
+			d = rune(c-'a') + 10
 		case c >= 'A' && c <= 'F':
-			d = uint32(c-'A') + 10
+			d = rune(c-'A') + 10
 		default:
 			return 0, false
 		}

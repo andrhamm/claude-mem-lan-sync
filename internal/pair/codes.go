@@ -124,13 +124,14 @@ func normalise(code string) string {
 
 // newCode returns a nine-digit code formatted in three groups.
 func newCode() (string, error) {
+	const numerals = "0123456789"
 	digits := make([]byte, codeDigits)
 	for i := range digits {
-		n, err := rand.Int(rand.Reader, big.NewInt(10))
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(numerals))))
 		if err != nil {
 			return "", err
 		}
-		digits[i] = byte('0' + n.Int64())
+		digits[i] = numerals[n.Int64()]
 	}
 	return string(digits[0:3]) + "-" + string(digits[3:6]) + "-" + string(digits[6:9]), nil
 }

@@ -35,7 +35,7 @@ func runFixtures(args []string, env Env) int {
 		fmt.Fprintf(env.Stderr, "cmemlan: no captures found in %s\n", *in)
 		return 1
 	}
-	if err := os.MkdirAll(*out, 0o755); err != nil {
+	if err := os.MkdirAll(*out, 0o750); err != nil {
 		fmt.Fprintf(env.Stderr, "cmemlan: %v\n", err)
 		return 1
 	}
