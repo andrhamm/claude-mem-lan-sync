@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"strings"
+
+	"github.com/andrhamm/claude-mem-lan-sync/internal/discover"
 
 	"github.com/andrhamm/claude-mem-lan-sync/internal/pair"
 	"github.com/andrhamm/claude-mem-lan-sync/internal/paths"
@@ -57,11 +60,23 @@ func runConnect(args []string, env Env) int {
 		return 0
 	}
 
-	if len(pos) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: cmemlan connect <hub-url> [--code <code> | --token <key> --user-id <id>]")
+	var url string
+	switch len(pos) {
+	case 1:
+		url = strings.TrimRight(pos[0], "/")
+	case 0:
+		// No URL given: look on the local link. mDNS cannot cross Tailscale or
+		// route between subnets, so this only helps on the same LAN.
+		found, err := discoverHub(env)
+		if err != nil {
+			fmt.Fprintf(env.Stderr, "cmemlan: %v\n", err)
+			return 1
+		}
+		url = found
+	default:
+		fmt.Fprintln(env.Stderr, "usage: cmemlan connect [hub-url] [--code <code> | --token <key> --user-id <id>]")
 		return 2
 	}
-	url := strings.TrimRight(pos[0], "/")
 
 	// Check for the fingerprint before touching the network. A pairing code is
 	// single-use, so redeeming it and then refusing for a missing fingerprint
@@ -165,4 +180,37 @@ func hostname() string {
 		return "unknown"
 	}
 	return h
+}
+
+// discoverHub browses the local link and returns a single hub's URL.
+//
+// Ambiguity is reported rather than guessed at: pointing a machine's memory at
+// the wrong hub is not something to resolve by picking the first answer.
+func discoverHub(env Env) (string, error) {
+	fmt.Fprintln(env.Stdout, "looking for a hub on this network…")
+
+	ctx, cancel := env.ctx()
+	defer cancel()
+
+	found, err := discover.Browse(ctx, discover.BrowseTimeout)
+	if err != nil {
+		return "", fmt.Errorf("%w\n\nPass the hub's address instead: cmemlan connect http://<host>:8787", err)
+	}
+	switch len(found) {
+	case 0:
+		return "", errors.New(
+			"no hub found on this network.\n\n" +
+				"mDNS does not cross Tailscale or reach other subnets, so pass the address:\n" +
+				"  cmemlan connect http://<host>:8787")
+	case 1:
+		fmt.Fprintf(env.Stdout, "found %s at %s\n\n", found[0].Name, found[0].Addr())
+		return found[0].Addr(), nil
+	default:
+		var b strings.Builder
+		b.WriteString("several hubs are advertising; pass the one you want:\n")
+		for _, f := range found {
+			fmt.Fprintf(&b, "  cmemlan connect %s   (%s)\n", f.Addr(), f.Name)
+		}
+		return "", errors.New(b.String())
+	}
 }

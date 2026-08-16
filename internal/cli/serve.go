@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/andrhamm/claude-mem-lan-sync/internal/discover"
 	"github.com/andrhamm/claude-mem-lan-sync/internal/hub"
 	"github.com/andrhamm/claude-mem-lan-sync/internal/logging"
 	"github.com/andrhamm/claude-mem-lan-sync/internal/pair"
@@ -147,6 +148,24 @@ func runServe(args []string, env Env) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Advertising is skipped automatically for a loopback bind, where it would be
+	// noise. Failures are logged, never fatal: discovery is a convenience and the
+	// hub works fine with an explicit URL.
+	mdnsCfg := discover.Config{
+		Enabled:      !f.noMDNS,
+		InstanceName: f.adverName,
+		Port:         int(addr.Port()),
+		BindAddr:     addr.Addr(),
+	}
+	if discover.ShouldAdvertise(mdnsCfg) {
+		go func() {
+			if err := discover.Advertise(ctx, mdnsCfg); err != nil {
+				log.Warn("mDNS advertising stopped", "error", err)
+			}
+		}()
+		fmt.Fprintf(env.Stdout, "advertising over mDNS as %s\n", discover.ServiceType)
+	}
 
 	select {
 	case err := <-errCh:
