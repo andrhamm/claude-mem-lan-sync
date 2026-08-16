@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -125,5 +126,86 @@ func TestFileWindowNoWindowOpen(t *testing.T) {
 	w := FileWindow{Dir: t.TempDir()}
 	if _, err := w.Redeem("123-456-789"); !errors.Is(err, ErrNoWindow) {
 		t.Fatalf("Redeem with no window returned %v", err)
+	}
+}
+
+// Concurrent redemption must not overrun the attempt budget. Without a lock,
+// every request reads the same count and writes back count+1, so the documented
+// five guesses become however many a caller can issue in parallel.
+func TestFileWindowAttemptBudgetHoldsUnderConcurrency(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := LoadOrCreate(dir); err != nil {
+		t.Fatal(err)
+	}
+	w := FileWindow{Dir: dir}
+	if _, _, err := w.Open(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var badCode, tooMany, other int
+
+	for i := 0; i < 24; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := FileWindow{Dir: dir}.Redeem("000-000-000")
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case errors.Is(err, ErrBadCode):
+				badCode++
+			case errors.Is(err, ErrTooManyAttempts), errors.Is(err, ErrNoWindow):
+				tooMany++
+			default:
+				other++
+			}
+		}()
+	}
+	wg.Wait()
+
+	if other != 0 {
+		t.Fatalf("%d unexpected errors", other)
+	}
+	// Real comparisons are capped: the rest must be turned away.
+	if badCode >= MaxAttempts {
+		t.Fatalf("%d guesses were evaluated against a cap of %d", badCode, MaxAttempts)
+	}
+}
+
+// A torn or unparseable window must not be grounds for deleting it, or any
+// caller could destroy a legitimate pairing window at will.
+func TestFileWindowSurvivesUnparseableRead(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := LoadOrCreate(dir); err != nil {
+		t.Fatal(err)
+	}
+	w := FileWindow{Dir: dir}
+	code, _, err := w.Open(time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a torn read by corrupting the file, then restoring it.
+	original, err := os.ReadFile(filepath.Join(dir, WindowFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, WindowFile), []byte("{partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Redeem(code); !errors.Is(err, ErrNoWindow) {
+		t.Fatalf("Redeem on a corrupt window returned %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, WindowFile)); err != nil {
+		t.Fatal("a corrupt read deleted the pairing window")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, WindowFile), original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Redeem(code); err != nil {
+		t.Fatalf("the window did not survive: %v", err)
 	}
 }

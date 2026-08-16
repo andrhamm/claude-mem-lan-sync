@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/andrhamm/claude-mem-lan-sync/internal/hub"
@@ -136,6 +137,7 @@ func TestReplayCapturedPushes(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/sync/changes?since=0&limit=500", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-User-Id", st.UserID())
+	req.Header.Set("X-Device-Id", "golden-device")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -186,6 +188,16 @@ func TestFixturesCarryNoSecrets(t *testing.T) {
 		for _, marker := range []string{"Bearer ", "/home/", "/Users/"} {
 			if bytes.Contains(raw, []byte(marker)) {
 				t.Errorf("%s contains %q — scrub it before committing", filepath.Base(p), marker)
+			}
+		}
+		// A bare credential in a JSON field matches none of the markers above,
+		// which is how a live pre-shared key once reached this directory.
+		for _, re := range []*regexp.Regexp{
+			regexp.MustCompile(`"(token|psk|key|secret|password)"\s*:\s*"[A-Za-z0-9_+/=-]{16,}"`),
+			regexp.MustCompile(`\b\d{3}-\d{3}-\d{3}\b`),
+		} {
+			if re.Find(raw) != nil {
+				t.Errorf("%s contains something shaped like a credential or pairing code", filepath.Base(p))
 			}
 		}
 	}

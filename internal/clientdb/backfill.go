@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -99,6 +100,12 @@ func (d *DB) Backfill(o BackfillOpts) (BackfillResult, error) {
 	backup := filepath.Join(d.dir, fmt.Sprintf("claude-mem.backup-%d.db", o.Now().UnixMilli()))
 	if _, err := d.db.Exec(`VACUUM INTO ?`, backup); err != nil {
 		return res, fmt.Errorf("clientdb: taking a backup before modifying the database: %w", err)
+	}
+	// SQLite creates the target as a fresh database at 0644 & ~umask, ignoring
+	// the source mode. This copy holds every observation, summary and prompt, so
+	// it must not be left world-readable.
+	if err := os.Chmod(backup, 0o600); err != nil {
+		return res, fmt.Errorf("clientdb: securing the backup: %w", err)
 	}
 	res.BackupPath = backup
 

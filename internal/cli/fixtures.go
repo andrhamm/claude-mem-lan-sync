@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -91,6 +92,16 @@ func ScrubExchange(raw []byte) ([]byte, error) {
 		}
 	}
 
+	// A /pair exchange carries the pairing code in the request and the hub's
+	// pre-shared key in the response. Neither belongs in a fixture, and neither
+	// sits under an "ops" envelope, so the op-scrubbing path below never sees
+	// them. Replace both payloads outright.
+	if stringField(doc, "path") == "/pair" {
+		doc["request"] = json.RawMessage(`{"code":"REDACTED"}`)
+		doc["response"] = json.RawMessage(`{"token":"REDACTED","user_id":"REDACTED"}`)
+		return json.MarshalIndent(doc, "", "  ")
+	}
+
 	for _, field := range []string{"request", "response"} {
 		body, ok := doc[field]
 		if !ok {
@@ -103,7 +114,50 @@ func ScrubExchange(raw []byte) ([]byte, error) {
 		doc[field] = scrubbed
 	}
 
-	return json.MarshalIndent(doc, "", "  ")
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+
+	// Last line of defence. A capture shape this code does not understand must
+	// fail loudly rather than quietly emit a fixture with a secret in it.
+	if leak := findSecretShapes(out); leak != "" {
+		return nil, fmt.Errorf(
+			"refusing to emit a fixture containing %s; this capture has a shape the scrubber "+
+				"does not understand, so it must not be committed", leak)
+	}
+	return out, nil
+}
+
+func stringField(doc map[string]json.RawMessage, key string) string {
+	raw, ok := doc[key]
+	if !ok {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return ""
+	}
+	return s
+}
+
+var (
+	// Any credential-ish field holding a long opaque value. Digests live in
+	// dedicated fields (operation_sha256, payload_sha256) and are legitimate.
+	secretLike = regexp.MustCompile(`"(token|psk|key|secret|password)"\s*:\s*"[A-Za-z0-9_+/=-]{16,}"`)
+	// The pairing code format.
+	codeLike = regexp.MustCompile(`\b\d{3}-\d{3}-\d{3}\b`)
+)
+
+// findSecretShapes describes the first secret-shaped value found, or "".
+func findSecretShapes(b []byte) string {
+	if secretLike.Find(b) != nil {
+		return "a credential-shaped field"
+	}
+	if codeLike.Find(b) != nil {
+		return "a pairing code"
+	}
+	return ""
 }
 
 // scrubBodies rewrites every op body inside a push or changes payload.
@@ -158,7 +212,7 @@ func scrubBodies(payload json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(envelope)
 }
 
-// synthesiseBody replaces free text inside a body while keeping its shape.
+// synthesiseBody replaces content inside an op body while keeping its shape.
 func synthesiseBody(body string) (string, error) {
 	var doc map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(body), &doc); err != nil {
@@ -166,26 +220,33 @@ func synthesiseBody(body string) (string, error) {
 	}
 
 	if payload, ok := doc["payload"]; ok && string(payload) != "null" {
-		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(payload, &fields); err == nil {
-			for k, v := range fields {
-				var s string
-				if err := json.Unmarshal(v, &s); err != nil {
-					continue // not a string; leave numbers, arrays and nulls alone
-				}
-				replaced, err := json.Marshal(lorem(s))
-				if err != nil {
-					return "", err
-				}
-				fields[k] = replaced
-			}
-			if b, err := json.Marshal(fields); err == nil {
+		// Every string leaf, not only the top-level ones. In a real observation
+		// the extracted memory lives in arrays — facts, concepts, files_read — so
+		// replacing only top-level strings would leave the actual content behind.
+		var decoded any
+		if err := json.Unmarshal(payload, &decoded); err == nil {
+			if b, err := json.Marshal(replaceStrings(decoded)); err == nil {
 				doc["payload"] = b
-				// payload_sha256 must match the synthetic payload.
 				if d, err := json.Marshal(proto.Digest(b)); err == nil {
 					doc["payload_sha256"] = d
 				}
 			}
+		}
+	}
+
+	// Identifiers outside the payload are personal too: a device uuid is stable
+	// and correlates every op a machine ever pushed.
+	for _, k := range []string{"origin_device_id", "id"} {
+		raw, ok := doc[k]
+		if !ok {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil || s == "" {
+			continue
+		}
+		if b, err := json.Marshal(anonymiseIdentifier(k, s)); err == nil {
+			doc[k] = b
 		}
 	}
 
@@ -197,8 +258,62 @@ func synthesiseBody(body string) (string, error) {
 	return string(out), nil
 }
 
-// lorem returns filler of the same length and rough shape as the input, so
-// size-sensitive behaviour still gets exercised.
+// replaceStrings walks a decoded JSON value and replaces every string leaf,
+// preserving structure and length.
+func replaceStrings(v any) any {
+	switch t := v.(type) {
+	case string:
+		return lorem(t)
+	case []any:
+		out := make([]any, len(t))
+		for i, e := range t {
+			out[i] = replaceStrings(e)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, e := range t {
+			out[k] = replaceStrings(e)
+		}
+		return out
+	default:
+		// Numbers, booleans and nulls carry no content and keep the fixture
+		// structurally faithful.
+		return v
+	}
+}
+
+// anonymiseIdentifier replaces an identifier while keeping its shape, so
+// validation that depends on the format still gets exercised.
+func anonymiseIdentifier(key, value string) string {
+	if key == "id" {
+		// Entity ids are "<kind>:<digest>"; keep the kind so routing still works.
+		if i := strings.Index(value, ":"); i >= 0 {
+			return value[:i+1] + proto.Digest([]byte("fixture:"+value))
+		}
+		return proto.Digest([]byte("fixture:" + value))
+	}
+
+	// Device ids are uuids; emit a stable fake of the same shape.
+	digest := proto.Digest([]byte("fixture-device:" + value))
+	hex := make([]rune, 0, 32)
+	for _, r := range strings.ToLower(digest) {
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') {
+			hex = append(hex, r)
+		}
+		if len(hex) == 32 {
+			break
+		}
+	}
+	for len(hex) < 32 {
+		hex = append(hex, '0')
+	}
+	s := string(hex)
+	return s[0:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:32]
+}
+
+// lorem returns filler of the same length as the input, so size-sensitive
+// behaviour still gets exercised.
 func lorem(s string) string {
 	if s == "" {
 		return ""

@@ -51,7 +51,11 @@ The image refuses to start without `CMEMLAN_ALLOW_CIDR`, so the peer filter is a
 - Every protocol request is compared in constant time.
 - `X-User-Id` must match the hub's own id; a mismatch is `403` and **never** creates a new partition.
   Auto-creating one would let a typo produce a silently divergent, apparently healthy sync.
-- Devices are recorded and can be revoked; revocation denies access on every route, not just listings.
+- Devices are recorded and can be revoked. Revocation is enforced on every route, and requests
+  without an `X-Device-Id` are refused so a revoked device cannot regain access by dropping the
+  header. Be clear about its limits, though: every device shares one key, so a revoked machine that
+  still holds that key could present a different device id. Revocation is a useful control against a
+  device you no longer run; **rotating the key is what actually cuts off someone who kept a copy.**
 
 ### Pairing
 
@@ -60,15 +64,27 @@ single-use, only a hash of it is stored, the attempt counter is persisted so res
 cannot reset it, and **five wrong guesses destroy the window**. A short code is only safe with a hard
 cap like that — a LAN attacker can try thousands per second.
 
-### The fingerprint matters
+### The fingerprint, and what it does not cover
 
 The key authenticates a device **to** the hub. Nothing in the protocol authenticates the hub **to** a
-device. A machine on your network can advertise over mDNS, accept your pairing attempt, and relay to
-the real hub while reading everything.
+device.
 
-Comparing the fingerprint printed by `pair` against the one `connect` reports is the only check that
-catches this, which is why `connect` requires `--fingerprint` and refuses before it touches the
-network. `--yes` skips it; do not use it on a network you do not control.
+Comparing the fingerprint printed by `pair` against the one `connect` reports catches an impersonator
+that mints its own key: its fingerprint will not match, and `connect` writes nothing. That is worth
+having, and it is why `--fingerprint` is required — checked before any network call, so a refusal
+never burns a single-use pairing code.
+
+**It does not catch a relay.** An attacker who forwards your pairing code to the real hub receives
+the genuine key and returns it, so the fingerprint matches perfectly while
+`CLAUDE_MEM_CLOUD_SYNC_HUB_URL` points at the attacker and every operation flows through them in
+plaintext. The fingerprint attests the key, not the address.
+
+The address is the part an attacker controls, so the address must not come from an untrusted source:
+`connect` **refuses to pair against an mDNS-discovered address**. Type the host that `pair` printed.
+Discovery without `--code` is still allowed, since a lookup with nothing to redeem gives an attacker
+nothing to steal.
+
+`--yes` skips the fingerprint check; do not use it on a network you do not control.
 
 ## Server hardening
 

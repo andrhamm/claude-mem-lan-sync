@@ -1,0 +1,26 @@
+{
+  "headers": {
+    "Authorization": "REDACTED",
+    "X-Device-Id": "REDACTED",
+    "X-Device-Name": "REDACTED",
+    "X-User-Id": "REDACTED"
+  },
+  "method": "GET",
+  "path": "/v1/sync/changes",
+  "query": "since=0\u0026limit=500",
+  "response": {
+    "epoch": "6430348680978570130",
+    "head_seq": "1",
+    "more": false,
+    "ops": [
+      {
+        "body": "{\"body_schema_version\":1,\"deleted\":false,\"deleted_at\":null,\"entity_rev\":\"1\",\"id\":\"observation:h3zlI3ZhppVhLVhCCBENEXPKG9_3_eRv3C3wJKW_Aos\",\"kind\":\"observation\",\"mutation\":null,\"origin_device_id\":\"0bb7af35-0e3b-e8d5-1000-000000000000\",\"origin_local_id\":\"1\",\"payload\":{\"agent_id\":null,\"agent_type\":null,\"concepts\":[\"lorem ipsum do\"],\"content_hash\":\"l\",\"created_at\":\"lorem ipsum dolor sit am\",\"created_at_epoch\":\"lorem ipsum d\",\"discovery_tokens\":\"lo\",\"facts\":[\"lorem ipsum dolor sit amet co\"],\"files_modified\":[],\"files_read\":[\"lorem ipsum dolor sit am\"],\"generated_by_model\":\"l\",\"memory_session_id\":\"l\",\"merged_into_project\":null,\"metadata\":null,\"narrative\":\"lorem ips\",\"project\":\"lorem ipsum do\",\"prompt_number\":\"l\",\"subtitle\":\"lor\",\"text\":\"lorem ipsum dolor sit amet consectetur\",\"title\":\"lorem\",\"type\":\"lorem ips\"},\"payload_schema_version\":2,\"payload_sha256\":\"hxFk7M6SSswJ-mq0AuRzeXGWEISDTx5A9t1B55nhoxE\"}",
+        "operation_sha256": "teKdNv8Jca1Ej5SmbxjDlHaNppZwnLkar3WyoqmSoLk",
+        "seq": "1",
+        "server_ts": "1786917027269"
+      }
+    ],
+    "protocol_version": 2
+  },
+  "status": 200
+}

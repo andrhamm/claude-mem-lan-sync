@@ -75,7 +75,15 @@ jobs:
         run: |
           if [ -d testdata/fixtures ]; then
             if grep -rIl -e 'Bearer ' -e '/home/' -e '/Users/' testdata/fixtures; then
-              echo "committed fixtures contain secrets or personal paths"; exit 1
+              echo "committed fixtures contain credentials or personal paths"; exit 1
+            fi
+            # A bare token in a JSON field matches none of the patterns above.
+            # That is how a live pre-shared key once reached this directory.
+            if grep -rIlE '"(token|psk|key|secret|password)"[[:space:]]*:[[:space:]]*"[A-Za-z0-9_+/=-]{16,}"' testdata/fixtures; then
+              echo "committed fixtures contain a credential-shaped field"; exit 1
+            fi
+            if grep -rIlE '[0-9]{3}-[0-9]{3}-[0-9]{3}' testdata/fixtures; then
+              echo "committed fixtures contain a pairing code"; exit 1
             fi
           fi
           if [ -d testdata/captures-local ]; then

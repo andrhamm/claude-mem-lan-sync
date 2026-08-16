@@ -89,7 +89,9 @@ cmemlan devices
 cmemlan revoke <device-id>
 ```
 
-If the key itself leaked, rotate it and re-pair every machine:
+Revocation stops a device that is still behaving like itself. Because every device shares one key, a
+machine that kept a copy could present a different device id — so if the key itself may have leaked,
+rotate it and re-pair every machine:
 
 ```bash
 cmemlan rotate-token

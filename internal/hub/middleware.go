@@ -76,18 +76,23 @@ func (s *Server) authed(w http.ResponseWriter, r *http.Request, method string, h
 		return
 	}
 
+	// Identity is mandatory. Treating an absent X-Device-Id as "unknown device,
+	// allow" would let a revoked device regain access simply by omitting the
+	// header. The real client always sends one, so requiring it costs nothing.
 	deviceID := r.Header.Get("X-Device-Id")
-	if deviceID != "" {
-		revoked, err := s.st.DeviceRevoked(r.Context(), deviceID)
-		if err != nil {
-			s.opts.Logger.Error("checking device revocation", "error", err)
-			s.writeError(w, http.StatusInternalServerError, proto.ReasonInternal)
-			return
-		}
-		if revoked {
-			s.writeError(w, http.StatusUnauthorized, proto.ReasonUnauthorized)
-			return
-		}
+	if deviceID == "" {
+		s.writeError(w, http.StatusBadRequest, proto.ReasonBadRequest)
+		return
+	}
+	revoked, err := s.st.DeviceRevoked(r.Context(), deviceID)
+	if err != nil {
+		s.opts.Logger.Error("checking device revocation", "error", err)
+		s.writeError(w, http.StatusInternalServerError, proto.ReasonInternal)
+		return
+	}
+	if revoked {
+		s.writeError(w, http.StatusUnauthorized, proto.ReasonUnauthorized)
+		return
 	}
 
 	h(w, r)

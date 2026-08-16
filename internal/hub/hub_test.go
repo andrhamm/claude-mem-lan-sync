@@ -566,3 +566,41 @@ func TestResponsesCarryContentLength(t *testing.T) {
 		t.Fatalf("Content-Length %q does not match body length %d", w.Header().Get("Content-Length"), len(body))
 	}
 }
+
+// Identity is mandatory. If an absent X-Device-Id meant "unknown device, allow",
+// a revoked device would regain access simply by dropping the header.
+func TestMissingDeviceIDRejected(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	for _, path := range []string{"/v1/sync/status", "/v1/sync/changes?since=0"} {
+		w := request(t, srv, http.MethodGet, path, nil, func(r *http.Request) {
+			r.Header.Del("X-Device-Id")
+		})
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s without a device id: status = %d, want 400", path, w.Code)
+		}
+	}
+}
+
+func TestRevokedDeviceCannotEvadeByChangingHeader(t *testing.T) {
+	srv, st := newTestServer(t)
+
+	if w := request(t, srv, http.MethodPost, "/v1/sync/ops", pushBody(t, makeWrapper(t, "1", "1"))); w.Code != http.StatusOK {
+		t.Fatalf("seed push failed: %s", w.Body)
+	}
+	if err := st.RevokeDevice(context.Background(), "device-A"); err != nil {
+		t.Fatal(err)
+	}
+
+	// The revoked device is refused.
+	if w := request(t, srv, http.MethodGet, "/v1/sync/status", nil); w.Code != http.StatusUnauthorized {
+		t.Errorf("revoked device: status = %d, want 401", w.Code)
+	}
+	// And it cannot simply omit the header to become anonymous.
+	w := request(t, srv, http.MethodGet, "/v1/sync/status", nil, func(r *http.Request) {
+		r.Header.Del("X-Device-Id")
+	})
+	if w.Code == http.StatusOK {
+		t.Error("dropping X-Device-Id let a revoked device back in")
+	}
+}

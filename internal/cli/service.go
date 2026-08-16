@@ -58,7 +58,11 @@ WantedBy=default.target
 }
 
 // launchdPlist renders a macOS user agent.
-func launchdPlist(exe, dataDir, bind string) string {
+func launchdPlist(exe, dataDir, bind, allowCIDR string) string {
+	allowArgs := ""
+	if allowCIDR != "" {
+		allowArgs = fmt.Sprintf("\n    <string>--allow-cidr</string><string>%s</string>", allowCIDR)
+	}
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -68,14 +72,14 @@ func launchdPlist(exe, dataDir, bind string) string {
   <array>
     <string>%s</string><string>serve</string>
     <string>--data-dir</string><string>%s</string>
-    <string>--bind</string><string>%s</string>
+    <string>--bind</string><string>%s</string>%s
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardErrorPath</key><string>%s/cmemlan.log</string>
 </dict>
 </plist>
-`, exe, dataDir, bind, dataDir)
+`, exe, dataDir, bind, allowArgs, dataDir)
 }
 
 func runService(f serveFlags, dataDir string, env Env) int {
@@ -127,7 +131,7 @@ func runService(f serveFlags, dataDir string, env Env) int {
 		return 0
 
 	case "darwin":
-		plist := launchdPlist(exe, dataDir, f.bind)
+		plist := launchdPlist(exe, dataDir, f.bind, f.allowCIDR)
 		if f.printUnit {
 			fmt.Fprint(env.Stdout, plist)
 			return 0

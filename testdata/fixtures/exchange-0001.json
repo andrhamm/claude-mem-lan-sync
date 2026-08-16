@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "method": "POST",
+  "path": "/pair",
+  "query": "",
+  "request": {
+    "code": "REDACTED"
+  },
+  "response": {
+    "token": "REDACTED",
+    "user_id": "REDACTED"
+  },
+  "status": 200
+}

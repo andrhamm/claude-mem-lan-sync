@@ -65,8 +65,20 @@ func runConnect(args []string, env Env) int {
 	case 1:
 		url = strings.TrimRight(pos[0], "/")
 	case 0:
-		// No URL given: look on the local link. mDNS cannot cross Tailscale or
-		// route between subnets, so this only helps on the same LAN.
+		// Pairing against a discovered address is refused. mDNS is
+		// unauthenticated, so an attacker can advertise, accept the pairing POST,
+		// forward the code to the real hub inside its window, and hand back the
+		// genuine key — whose fingerprint then matches perfectly. The address is
+		// what the attacker controls, so the address is what the user must type.
+		if *code != "" {
+			fmt.Fprintln(env.Stderr,
+				"cmemlan: pairing requires the hub's address to be given explicitly\n\n"+
+					"Discovery is unauthenticated: anything on this network can advertise itself\n"+
+					"and relay to your real hub. Type the address `cmemlan pair` printed:\n\n"+
+					"  cmemlan connect http://<host>:8787 --code <code> --fingerprint <fingerprint>")
+			return 2
+		}
+		// Without a code there is nothing to steal; discovery is only a lookup.
 		found, err := discoverHub(env)
 		if err != nil {
 			fmt.Fprintf(env.Stderr, "cmemlan: %v\n", err)

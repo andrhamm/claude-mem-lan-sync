@@ -65,7 +65,14 @@ func (f FileWindow) Open(ttl time.Duration) (code string, expires time.Time, err
 	if err := os.MkdirAll(f.Dir, 0o700); err != nil {
 		return "", time.Time{}, err
 	}
-	if err := os.WriteFile(f.path(), b, 0o600); err != nil {
+
+	unlock, err := f.lock()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	defer unlock()
+
+	if err := f.writeAtomic(b); err != nil {
 		return "", time.Time{}, fmt.Errorf("pair: writing the pairing window: %w", err)
 	}
 	return code, expires, nil
@@ -81,7 +88,18 @@ func (f FileWindow) Close() error {
 }
 
 // Redeem exchanges a code for the pre-shared key, consuming the window.
+//
+// The whole read-modify-write runs under an exclusive lock. Without one,
+// concurrent requests each read the same attempt count and each write back
+// count+1, so a documented budget of five guesses becomes however many a caller
+// can issue in parallel — and the hub serves 64 requests at once.
 func (f FileWindow) Redeem(code string) (string, error) {
+	unlock, err := f.lock()
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+
 	b, err := os.ReadFile(f.path())
 	if errors.Is(err, os.ErrNotExist) {
 		return "", ErrNoWindow
@@ -92,7 +110,8 @@ func (f FileWindow) Redeem(code string) (string, error) {
 
 	var state windowState
 	if err := json.Unmarshal(b, &state); err != nil {
-		_ = f.Close()
+		// An unreadable window is not grounds for deleting it: a torn read would
+		// otherwise let any caller destroy a legitimate pairing window.
 		return "", ErrNoWindow
 	}
 
@@ -108,9 +127,10 @@ func (f FileWindow) Redeem(code string) (string, error) {
 	if subtle.ConstantTimeCompare([]byte(hashCode(code)), []byte(state.CodeHash)) != 1 {
 		state.Attempts++
 		// Persist the attempt before returning, so restarting the hub cannot be
-		// used to reset the budget.
+		// used to reset the budget. Written via a temp file and renamed, so a
+		// concurrent reader never sees a truncated window.
 		if updated, mErr := json.Marshal(state); mErr == nil {
-			_ = os.WriteFile(f.path(), updated, 0o600)
+			_ = f.writeAtomic(updated)
 		}
 		if state.Attempts >= MaxAttempts {
 			_ = f.Close()
@@ -127,4 +147,60 @@ func (f FileWindow) Redeem(code string) (string, error) {
 		return "", err
 	}
 	return keys.PSK, nil
+}
+
+// lock takes an exclusive lock for the pairing window.
+//
+// A lock file rather than flock keeps this working the same way across
+// platforms, which matters because the hub and the `pair` command are separate
+// processes. A lock older than the window itself is treated as abandoned.
+func (f FileWindow) lock() (func(), error) {
+	path := f.path() + ".lock"
+	deadline := f.now().Add(5 * time.Second)
+
+	for {
+		fh, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			_ = fh.Close()
+			return func() { _ = os.Remove(path) }, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return nil, fmt.Errorf("pair: locking the pairing window: %w", err)
+		}
+
+		// Clear a lock left behind by a process that died mid-redemption.
+		if info, statErr := os.Stat(path); statErr == nil {
+			if f.now().Sub(info.ModTime()) > time.Minute {
+				_ = os.Remove(path)
+				continue
+			}
+		}
+		if f.now().After(deadline) {
+			return nil, errors.New("pair: timed out waiting for the pairing window lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// writeAtomic replaces the window file without ever truncating it in place.
+func (f FileWindow) writeAtomic(b []byte) error {
+	tmp, err := os.CreateTemp(f.Dir, ".pairing-*.tmp")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer func() { _ = os.Remove(name) }()
+
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, f.path())
 }
