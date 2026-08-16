@@ -38,6 +38,7 @@ type serveFlags struct {
 	printUnit   bool
 	install     bool
 	uninstall   bool
+	recordDir   string
 }
 
 func runServe(args []string, env Env) int {
@@ -57,6 +58,7 @@ func runServe(args []string, env Env) int {
 	fs.BoolVar(&f.printUnit, "print-unit", false, "print a service unit and exit")
 	fs.BoolVar(&f.install, "install-service", false, "install and start a user service")
 	fs.BoolVar(&f.uninstall, "uninstall-service", false, "stop and remove the user service")
+	fs.StringVar(&f.recordDir, "record", "", "capture traffic into this directory (local development only)")
 
 	if _, err := parseFlags(fs, args); err != nil {
 		return 2
@@ -138,6 +140,16 @@ func runServe(args []string, env Env) int {
 	// The pairing window lives in a file so `cmemlan pair` — a separate process —
 	// can open one against a hub that is already running.
 	srv.SetPairExchanger(pair.FileWindow{Dir: dataDir})
+
+	if f.recordDir != "" {
+		rec, err := hub.NewRecorder(f.recordDir)
+		if err != nil {
+			fmt.Fprintf(env.Stderr, "cmemlan: %v\n", err)
+			return 1
+		}
+		srv.SetRecorder(rec)
+		fmt.Fprintf(env.Stdout, "capturing traffic to %s (contains real memory content)\n", f.recordDir)
+	}
 
 	base, err := net.Listen("tcp", addr.String())
 	if err != nil {

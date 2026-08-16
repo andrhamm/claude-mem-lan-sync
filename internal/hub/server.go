@@ -63,6 +63,10 @@ type Options struct {
 
 	Logger *slog.Logger
 
+	// RecordDir enables traffic capture for fixture generation. Captures contain
+	// real memory content, so this is a local-only development aid.
+	RecordDir string
+
 	// WebSocketReady suppresses the X-Sync-Mode: poll hint once /v1/sync/ws
 	// exists. Until then the header stops every device retrying a 404 once a
 	// minute, forever.
@@ -99,6 +103,7 @@ type Server struct {
 	opts     Options
 	inflight chan struct{}
 	pair     PairExchanger
+	recorder *Recorder
 }
 
 // PairExchanger redeems a pairing code for the pre-shared key. Supplied by the
@@ -120,9 +125,12 @@ func New(st *store.Store, opts Options) *Server {
 // SetPairExchanger enables POST /pair.
 func (s *Server) SetPairExchanger(p PairExchanger) { s.pair = p }
 
+// SetRecorder enables traffic capture.
+func (s *Server) SetRecorder(r *Recorder) { s.recorder = r }
+
 // Handler returns the routed, wrapped handler.
 func (s *Server) Handler() http.Handler {
-	return s.recoverPanics(s.limitInFlight(s.checkHostAndOrigin(http.HandlerFunc(s.route))))
+	return s.recoverPanics(s.limitInFlight(s.checkHostAndOrigin(s.record(http.HandlerFunc(s.route)))))
 }
 
 // route dispatches on an exact path.

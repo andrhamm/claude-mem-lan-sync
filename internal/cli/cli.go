@@ -102,6 +102,8 @@ func Run(args []string, env Env) int {
 		return runStatus(rest, env)
 	case "doctor":
 		return runDoctor(rest, env)
+	case "fixtures":
+		return runFixtures(rest, env)
 	default:
 		fmt.Fprintf(env.Stderr, "cmemlan: unknown command %q\n\n%s", cmd, usage)
 		return 2
