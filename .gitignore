@@ -1,0 +1,12 @@
+# raw captured traffic — may contain real memory content and bearer tokens
+testdata/captures-local/
+
+# build output
+/dist/
+/cmemlan
+*.test
+
+# local databases
+*.db
+*.db-wal
+*.db-shm
