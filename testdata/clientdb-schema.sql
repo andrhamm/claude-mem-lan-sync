@@ -16,7 +16,6 @@ CREATE TABLE sdk_sessions (
         completed_at_epoch INTEGER,
         status TEXT CHECK(status IN ('active', 'completed', 'failed')) NOT NULL DEFAULT 'active'
       , worker_port INTEGER, prompt_counter INTEGER DEFAULT 0, custom_title TEXT);
-CREATE TABLE sqlite_sequence(name,seq);
 CREATE INDEX idx_sdk_sessions_claude_id ON sdk_sessions(content_session_id);
 CREATE INDEX idx_sdk_sessions_sdk_id ON sdk_sessions(memory_session_id);
 CREATE INDEX idx_sdk_sessions_project ON sdk_sessions(project);
@@ -28,10 +27,6 @@ CREATE VIRTUAL TABLE user_prompts_fts USING fts5(
         content_rowid='id'
       )
 /* user_prompts_fts(prompt_text) */;
-CREATE TABLE 'user_prompts_fts_data'(id INTEGER PRIMARY KEY, block BLOB);
-CREATE TABLE 'user_prompts_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
-CREATE TABLE 'user_prompts_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
-CREATE TABLE 'user_prompts_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID;
 CREATE TABLE pending_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_db_id INTEGER NOT NULL,
@@ -218,10 +213,6 @@ CREATE VIRTUAL TABLE observations_fts USING fts5(
         content_rowid='id'
       )
 /* observations_fts(title,subtitle,narrative,text,facts,concepts) */;
-CREATE TABLE 'observations_fts_data'(id INTEGER PRIMARY KEY, block BLOB);
-CREATE TABLE 'observations_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
-CREATE TABLE 'observations_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
-CREATE TABLE 'observations_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID;
 CREATE TRIGGER observations_ai AFTER INSERT ON observations BEGIN
         INSERT INTO observations_fts(rowid, title, subtitle, narrative, text, facts, concepts)
         VALUES (new.id, new.title, new.subtitle, new.narrative, new.text, new.facts, new.concepts);
@@ -247,10 +238,6 @@ CREATE VIRTUAL TABLE session_summaries_fts USING fts5(
         content_rowid='id'
       )
 /* session_summaries_fts(request,investigated,learned,completed,next_steps,notes) */;
-CREATE TABLE 'session_summaries_fts_data'(id INTEGER PRIMARY KEY, block BLOB);
-CREATE TABLE 'session_summaries_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
-CREATE TABLE 'session_summaries_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
-CREATE TABLE 'session_summaries_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID;
 CREATE TRIGGER session_summaries_ai AFTER INSERT ON session_summaries BEGIN
         INSERT INTO session_summaries_fts(rowid, request, investigated, learned, completed, next_steps, notes)
         VALUES (new.id, new.request, new.investigated, new.learned, new.completed, new.next_steps, new.notes);

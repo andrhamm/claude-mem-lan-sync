@@ -51,8 +51,20 @@ const usage = `cmemlan — self-hosted LAN sync for claude-mem
 Usage:
   cmemlan <command> [flags]
 
-Commands:
-  version   print the version
+Hub commands:
+  serve          run the hub
+  pair           open a pairing window and print a code
+  devices        list devices that have contacted this hub
+  revoke <id>    deny a device further access
+  rotate-token   replace the pre-shared key
+
+Client commands:
+  connect [url]  point this machine's claude-mem at a hub
+  backfill       queue existing memories for upload
+  status         show sync state
+  doctor         diagnose sync problems
+
+  version        print the version
 
 Run "cmemlan <command> -h" for command flags.
 `
@@ -72,8 +84,25 @@ func Run(args []string, env Env) int {
 	case "help", "-h", "--help":
 		fmt.Fprint(env.Stdout, usage)
 		return 0
+	case "serve":
+		return runServe(rest, env)
+	case "pair":
+		return runPair(rest, env)
+	case "devices":
+		return runDevices(rest, env)
+	case "revoke":
+		return runRevoke(rest, env)
+	case "rotate-token":
+		return runRotateToken(rest, env)
+	case "connect":
+		return runConnect(rest, env)
+	case "backfill":
+		return runBackfill(rest, env)
+	case "status":
+		return runStatus(rest, env)
+	case "doctor":
+		return runDoctor(rest, env)
 	default:
-		_ = rest
 		fmt.Fprintf(env.Stderr, "cmemlan: unknown command %q\n\n%s", cmd, usage)
 		return 2
 	}
