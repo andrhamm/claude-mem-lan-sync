@@ -357,6 +357,8 @@ internal/{proto,store,hub,discover,pair,clientdb,settings,cli}/
 testdata/fixtures/          captured client traffic
 docs/                       protocol.md, architecture.md, security.md,
                             backfill.md, testing.md, troubleshooting.md
+.claude-plugin/             marketplace.json
+plugin/                     plugin.json + skills/claude-mem-lan-sync/SKILL.md
 .github/workflows/          ci.yml, release.yml
 Dockerfile · install.sh · README.md · CLAUDE.md · LICENSE
 ```
@@ -379,6 +381,57 @@ repo, since it is otherwise undocumented.
 - Sequence numbers, revisions, and epochs are decimal strings end to end
 - Re-capture fixtures on claude-mem updates; `doctor` warns on untested versions
 - Dependency budget: stdlib, SQLite driver, mDNS library; anything else needs justification
+
+## Claude Code plugin marketplace
+
+The repository doubles as a Claude Code plugin marketplace, so an agent can install the setup skill
+and drive installation correctly without the user hand-holding it.
+
+```
+.claude-plugin/marketplace.json          marketplace manifest (owner: andrhamm)
+plugin/
+  .claude-plugin/plugin.json             plugin manifest (name: claude-mem-lan-sync)
+  skills/claude-mem-lan-sync/SKILL.md    the setup skill
+```
+
+Users install with:
+
+```
+/plugin marketplace add andrhamm/claude-mem-lan-sync
+/plugin install claude-mem-lan-sync@andrhamm
+```
+
+### Skill design
+
+The skill is deliberately brief — a procedure, not a manual. Its frontmatter must make an agent
+reach for it whenever Claude Code memory sync comes up:
+
+```yaml
+---
+name: claude-mem-lan-sync
+description: Set up, verify, or troubleshoot self-hosted LAN sync for claude-mem — sharing Claude
+  Code memory across machines without cmem.ai cloud sync. Use whenever claude-mem, Claude Code
+  memory, cross-device or multi-machine memory sync, CLAUDE_MEM_CLOUD_SYNC_* variables, cmem.ai,
+  or "sync my memories between computers" come up, including install, pairing, backfill, and
+  diagnosing sync that is not working.
+---
+```
+
+Body covers, in order: decide which machine hosts the hub; install the binary; `serve
+--install-service`; `pair`; on each other machine `connect --code`; offer `backfill --dry-run` then
+`backfill`; verify with `doctor` and `status`. Plus the failure playbook — hub unreachable, mDNS not
+crossing Tailscale, worker not restarted, pending queue not draining — and the hard rules an agent
+must not violate: never bind a wide interface without asking, never run `backfill` while the worker
+is writing, never suggest cmem.ai cloud sync as the fix.
+
+The skill instructs the agent to run `cmemlan doctor` first and act on its output rather than
+guessing, which keeps the skill short and the diagnostics in the binary where they can be tested.
+
+### CI
+
+`ci.yml` validates `marketplace.json` and `plugin.json` against their expected shape and lints the
+skill frontmatter (name matches directory, description non-empty and within length limits), so a
+malformed manifest cannot ship in a release.
 
 ## Compatibility policy
 
