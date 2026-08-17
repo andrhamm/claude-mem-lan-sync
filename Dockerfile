@@ -1,7 +1,12 @@
 # GoReleaser supplies the prebuilt binary; this image only packages it.
+#
+# The build context holds artifacts under platform directories (linux/amd64,
+# linux/arm64), so the copy is resolved through TARGETPLATFORM rather than a
+# bare filename — that is what makes one Dockerfile serve a multi-arch build.
 FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY cmemlan /usr/local/bin/cmemlan
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/cmemlan /usr/local/bin/cmemlan
 
 VOLUME ["/data"]
 EXPOSE 8787
