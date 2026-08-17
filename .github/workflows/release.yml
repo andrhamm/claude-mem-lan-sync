@@ -30,7 +30,7 @@ jobs:
       # GoReleaser shells out to syft for the SBOM; it is not on the runner.
       - uses: anchore/sbom-action/download-syft@v0
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
