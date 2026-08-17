@@ -45,6 +45,11 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # When two tags point at the same commit — a release candidate and the
+          # stable tag that follows it — git describe picks one of them, and
+          # GoReleaser may build the wrong version and try to re-upload assets to
+          # an existing release. Pin it to the tag that triggered this run.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
 
       - name: attest build provenance
         uses: actions/attest-build-provenance@v3
