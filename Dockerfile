@@ -3,10 +3,18 @@
 # The build context holds artifacts under platform directories (linux/amd64,
 # linux/arm64), so the copy is resolved through TARGETPLATFORM rather than a
 # bare filename — that is what makes one Dockerfile serve a multi-arch build.
+
+# The runtime image runs as uid 65532 and has no shell, so the data directory
+# has to arrive already owned by that user. Without this the hub cannot create
+# its lock file and exits with "permission denied" on first run.
+FROM busybox:stable AS prep
+RUN mkdir -p /data && chown 65532:65532 /data && chmod 0700 /data
+
 FROM gcr.io/distroless/static-debian12:nonroot
 
 ARG TARGETPLATFORM
 COPY $TARGETPLATFORM/cmemlan /usr/local/bin/cmemlan
+COPY --from=prep --chown=65532:65532 /data /data
 
 VOLUME ["/data"]
 EXPOSE 8787
