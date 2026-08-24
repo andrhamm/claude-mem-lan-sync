@@ -4,10 +4,13 @@ go 1.26
 
 toolchain go1.26.6
 
-require modernc.org/sqlite v1.56.0
+require (
+	github.com/brutella/dnssd v1.2.14
+	modernc.org/sqlite v1.57.0
+	pgregory.net/rapid v1.3.0
+)
 
 require (
-	github.com/brutella/dnssd v1.2.14 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
@@ -24,5 +27,4 @@ require (
 	modernc.org/libc v1.74.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	pgregory.net/rapid v1.3.0 // indirect
 )
